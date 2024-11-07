@@ -1,0 +1,58 @@
+import string 
+import numpy as np
+from tensorflow.keras.preprocessing.text import Tokenizer 
+from tensorflow.keras.layers import Embedding, Lambda, Dense 
+from tensorflow.keras.models import Sequential 
+import tensorflow as tf 
+
+# Sample text
+text = """
+The speed of transmission is an important point of difference between the two viruses. Influenza has a shorter median incubation period (the time from infection to appearance of symptoms) and a shorter serial interval (the time between successive cases) than COVID-19 virus. The serial interval for COVID-19 virus is estimated to be 5-6 days, while for influenza virus, the serial interval is 3 days. This means that influenza can spread faster than COVID-19.
+"""
+
+# Preprocess text
+text_data = [word.translate(str.maketrans('', '', string.punctuation)).lower() 
+            for word in text.split()]
+
+# Create vocabulary
+tk = Tokenizer()
+tk.fit_on_texts(text_data)
+w2idx = tk.word_index
+idx2w = {v:k for k,v in w2idx.items()}
+
+# Create training data
+sentence = [w2idx.get(w) for w in text_data]
+target = []
+context = []
+context_size = 2
+
+for i in range(context_size, len(sentence)-context_size):
+    target.append(sentence[i])
+    temp = sentence[i-context_size:i] + sentence[i+1:i+1+context_size]
+    context.append(temp)
+
+# Convert to numpy arrays
+x = np.array(context)
+y = np.array(target)
+
+# Build model
+model = Sequential([
+    Embedding(input_dim=len(w2idx)+1, output_dim=10, input_length=2*context_size),
+    Lambda(lambda x: tf.reduce_mean(x, axis=1)),
+    Dense(256, activation='relu'),
+    Dense(len(w2idx)+1, activation='softmax')
+])
+
+model.compile(optimizer='adam', 
+             loss=tf.keras.losses.SparseCategoricalCrossentropy(),
+             metrics=['accuracy'])
+
+# Train model
+model.fit(x, y, epochs=50)
+
+# Test prediction
+test = ['is', 'an', 'point', 'of']
+test_indices = [w2idx.get(t) for t in test]
+pred = model.predict(np.array([test_indices]))
+predicted_word = idx2w.get(pred.argmax())
+print(f"Predicted word: {predicted_word}")
